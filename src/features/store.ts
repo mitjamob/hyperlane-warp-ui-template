@@ -66,7 +66,11 @@ export const useStore = create<AppState>()(
         set({ chainMetadataOverrides: filtered, multiProvider });
       },
       multiProvider: new MultiProtocolProvider({}),
-      registry: new GithubRegistry({ uri: config.registryUrl, proxyUrl: config.registryProxyUrl }),
+      registry: new GithubRegistry({
+        uri: config.registryUrl,
+        branch: config.registryBranch,
+        proxyUrl: config.registryProxyUrl,
+      }),
       warpCore: new WarpCore(new MultiProtocolProvider({}), []),
       setWarpContext: ({ registry, chainMetadata, multiProvider, warpCore }) => {
         logger.debug('Setting warp context in store');
@@ -150,14 +154,16 @@ async function initWarpContext(
   storeMetadataOverrides: ChainMap<Partial<ChainMetadata> | undefined>,
 ) {
   try {
+    const coreConfig = await assembleWarpCoreConfig();
+    const chainsInTokens = Array.from(new Set(coreConfig.tokens.map((t) => t.chainName)));
     // Pre-load registry content to avoid repeated requests
     await registry.listRegistryContent();
     const { chainMetadata, chainMetadataWithOverrides } = await assembleChainMetadata(
+      chainsInTokens,
       registry,
       storeMetadataOverrides,
     );
     const multiProvider = new MultiProtocolProvider(chainMetadataWithOverrides);
-    const coreConfig = await assembleWarpCoreConfig();
     const warpCore = WarpCore.FromConfig(multiProvider, coreConfig);
     return { registry, chainMetadata, multiProvider, warpCore };
   } catch (error) {

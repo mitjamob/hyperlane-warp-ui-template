@@ -1,8 +1,7 @@
+import { ChainSearchMenuProps, ChevronIcon } from '@hyperlane-xyz/widgets';
 import { useField, useFormikContext } from 'formik';
-import Image from 'next/image';
 import { useState } from 'react';
 import { ChainLogo } from '../../components/icons/ChainLogo';
-import ChevronIcon from '../../images/icons/chevron-down.svg';
 import { TransferFormValues } from '../transfer/types';
 import { ChainSelectListModal } from './ChainSelectModal';
 import { useChainDisplayName } from './hooks';
@@ -10,12 +9,12 @@ import { useChainDisplayName } from './hooks';
 type Props = {
   name: string;
   label: string;
-  chains: ChainName[];
   onChange?: (id: ChainName) => void;
   disabled?: boolean;
+  customListItemField: ChainSearchMenuProps['customListItemField'];
 };
 
-export function ChainSelectField({ name, label, chains, onChange, disabled }: Props) {
+export function ChainSelectField({ name, label, onChange, disabled, customListItemField }: Props) {
   const [field, , helpers] = useField<ChainName>(name);
   const { setFieldValue } = useFormikContext<TransferFormValues>();
 
@@ -55,13 +54,13 @@ export function ChainSelectField({ name, label, chains, onChange, disabled }: Pr
             {displayName}
           </div>
         </div>
-        <Image src={ChevronIcon} width={12} height={8} alt="" />
+        <ChevronIcon width={12} height={8} direction="s" />
       </button>
       <ChainSelectListModal
         isOpen={isModalOpen}
         close={() => setIsModalOpen(false)}
-        chains={chains}
         onSelect={handleChange}
+        customListItemField={customListItemField}
       />
     </div>
   );

@@ -1,21 +1,30 @@
 import { TokenAmount, WarpCore } from '@hyperlane-xyz/sdk';
 import { ProtocolType, errorToString, isNullish, toWei } from '@hyperlane-xyz/utils';
+import {
+  AccountInfo,
+  ChevronIcon,
+  IconButton,
+  SpinnerIcon,
+  SwapIcon,
+  getAccountAddressAndPubKey,
+  useAccountAddressForChain,
+  useAccounts,
+} from '@hyperlane-xyz/widgets';
 import BigNumber from 'bignumber.js';
 import { Form, Formik, useFormikContext } from 'formik';
 import { useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
-import { SmallSpinner } from '../../components/animation/SmallSpinner';
 import { ConnectAwareSubmitButton } from '../../components/buttons/ConnectAwareSubmitButton';
-import { IconButton } from '../../components/buttons/IconButton';
 import { SolidButton } from '../../components/buttons/SolidButton';
-import { ChevronIcon } from '../../components/icons/Chevron';
 import { TextField } from '../../components/input/TextField';
-import SwapIcon from '../../images/icons/swap.svg';
+import { config } from '../../consts/config';
 import { Color } from '../../styles/Color';
 import { logger } from '../../utils/logger';
+import { ChainConnectionWarning } from '../chains/ChainConnectionWarning';
 import { ChainSelectField } from '../chains/ChainSelectField';
 import { ChainWalletWarning } from '../chains/ChainWalletWarning';
-import { useChainDisplayName } from '../chains/hooks';
+import { useChainDisplayName, useMultiProvider } from '../chains/hooks';
+import { getNumRoutesWithSelectedChain } from '../chains/utils';
 import { useIsAccountSanctioned } from '../sanctions/hooks/useIsAccountSanctioned';
 import { useStore } from '../store';
 import { SelectOrInputTokenIds } from '../tokens/SelectOrInputTokenIds';
@@ -23,12 +32,6 @@ import { TokenSelectField } from '../tokens/TokenSelectField';
 import { useIsApproveRequired } from '../tokens/approval';
 import { useDestinationBalance, useOriginBalance } from '../tokens/balances';
 import { getIndexForToken, getTokenByIndex, useWarpCore } from '../tokens/hooks';
-import {
-  getAccountAddressAndPubKey,
-  useAccountAddressForChain,
-  useAccounts,
-} from '../wallet/hooks/multiProtocol';
-import { AccountInfo } from '../wallet/hooks/types';
 import { useFetchMaxAmount } from './maxAmount';
 import { TransferFormValues } from './types';
 import { useRecipientBalanceWatcher } from './useBalanceWatcher';
@@ -36,10 +39,11 @@ import { useFeeQuotes } from './useFeeQuotes';
 import { useTokenTransfer } from './useTokenTransfer';
 
 export function TransferTokenForm() {
+  const multiProvider = useMultiProvider();
   const warpCore = useWarpCore();
 
   const initialValues = useFormInitialValues();
-  const { accounts } = useAccounts();
+  const { accounts } = useAccounts(multiProvider, config.addressBlacklist);
 
   // Flag for if form is in input vs review mode
   const [isReview, setIsReview] = useState(false);
@@ -61,9 +65,9 @@ export function TransferTokenForm() {
       validateOnChange={false}
       validateOnBlur={false}
     >
-      {({ isValidating, values }) => (
+      {({ isValidating }) => (
         <Form className="flex w-full flex-col items-stretch">
-          <ChainWalletWarning originChain={values.origin} />
+          <WarningBanners />
           <ChainSelectSection isReview={isReview} />
           <div className="mt-3.5 flex items-end justify-between space-x-4">
             <TokenSection setIsNft={setIsNft} isReview={isReview} />
@@ -97,28 +101,48 @@ function SwapChainsButton({ disabled }: { disabled?: boolean }) {
 
   return (
     <IconButton
-      imgSrc={SwapIcon}
       width={20}
       height={20}
       title="Swap chains"
-      classes={!disabled ? 'hover:rotate-180' : undefined}
+      className={!disabled ? 'hover:rotate-180' : undefined}
       onClick={onClick}
       disabled={disabled}
-    />
+    >
+      <SwapIcon width={20} height={20} />
+    </IconButton>
   );
 }
 
 function ChainSelectSection({ isReview }: { isReview: boolean }) {
   const warpCore = useWarpCore();
-  const chains = useMemo(() => warpCore.getTokenChains(), [warpCore]);
+
+  const { values } = useFormikContext<TransferFormValues>();
+
+  const originRouteCounts = useMemo(() => {
+    return getNumRoutesWithSelectedChain(warpCore, values.origin, true);
+  }, [values.origin, warpCore]);
+
+  const destinationRouteCounts = useMemo(() => {
+    return getNumRoutesWithSelectedChain(warpCore, values.destination, false);
+  }, [values.destination, warpCore]);
 
   return (
-    <div className="mt-4 flex items-center justify-between gap-4">
-      <ChainSelectField name="origin" label="From" chains={chains} disabled={isReview} />
+    <div className="mt-2 flex items-center justify-between gap-4">
+      <ChainSelectField
+        name="origin"
+        label="From"
+        disabled={isReview}
+        customListItemField={destinationRouteCounts}
+      />
       <div className="flex flex-1 flex-col items-center">
         <SwapChainsButton disabled={isReview} />
       </div>
-      <ChainSelectField name="destination" label="To" chains={chains} disabled={isReview} />
+      <ChainSelectField
+        name="destination"
+        label="To"
+        disabled={isReview}
+        customListItemField={originRouteCounts}
+      />
     </div>
   );
 }
@@ -159,7 +183,7 @@ function AmountSection({ isNft, isReview }: { isNft: boolean; isReview: boolean 
           <TextField
             name="amount"
             placeholder="0.00"
-            classes="w-full"
+            className="w-full"
             type="number"
             step="any"
             disabled={isReview}
@@ -188,7 +212,7 @@ function RecipientSection({ isReview }: { isReview: boolean }) {
         <TextField
           name="recipient"
           placeholder="0x123456..."
-          classes="w-full"
+          className="w-full"
           disabled={isReview}
         />
         <SelfButton disabled={isReview} />
@@ -272,7 +296,8 @@ function ButtonSection({
 function MaxButton({ balance, disabled }: { balance?: TokenAmount; disabled?: boolean }) {
   const { values, setFieldValue } = useFormikContext<TransferFormValues>();
   const { origin, destination, tokenIndex } = values;
-  const { accounts } = useAccounts();
+  const multiProvider = useMultiProvider();
+  const { accounts } = useAccounts(multiProvider);
   const { fetchMaxAmount, isLoading } = useFetchMaxAmount();
 
   const onClick = async () => {
@@ -294,7 +319,7 @@ function MaxButton({ balance, disabled }: { balance?: TokenAmount; disabled?: bo
     >
       {isLoading ? (
         <div className="flex items-center">
-          <SmallSpinner className="text-white" />
+          <SpinnerIcon className="h-5 w-5" color="white" />
         </div>
       ) : (
         'Max'
@@ -305,8 +330,9 @@ function MaxButton({ balance, disabled }: { balance?: TokenAmount; disabled?: bo
 
 function SelfButton({ disabled }: { disabled?: boolean }) {
   const { values, setFieldValue } = useFormikContext<TransferFormValues>();
+  const multiProvider = useMultiProvider();
   const chainDisplayName = useChainDisplayName(values.destination);
-  const address = useAccountAddressForChain(values.destination);
+  const address = useAccountAddressForChain(multiProvider, values.destination);
   const onClick = () => {
     if (disabled) return;
     if (address) setFieldValue('recipient', address);
@@ -357,7 +383,7 @@ function ReviewDetails({ visible }: { visible: boolean }) {
       <div className="mt-1.5 space-y-2 break-all rounded border border-gray-400 bg-gray-150 px-2.5 py-2 text-sm">
         {isLoading ? (
           <div className="flex items-center justify-center py-6">
-            <SmallSpinner />
+            <SpinnerIcon className="h-5 w-5" />
           </div>
         ) : (
           <>
@@ -406,6 +432,17 @@ function ReviewDetails({ visible }: { visible: boolean }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function WarningBanners() {
+  const { values } = useFormikContext<TransferFormValues>();
+  return (
+    // Max height to prevent double padding if multiple warnings are visible
+    <div className="max-h-10">
+      <ChainWalletWarning origin={values.origin} />
+      <ChainConnectionWarning origin={values.origin} destination={values.destination} />
     </div>
   );
 }

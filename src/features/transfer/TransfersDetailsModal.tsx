@@ -1,18 +1,25 @@
 import { ProtocolType } from '@hyperlane-xyz/utils';
-import { MessageStatus, MessageTimeline, useMessageTimeline } from '@hyperlane-xyz/widgets';
+import {
+  CopyButton,
+  MessageStatus,
+  MessageTimeline,
+  Modal,
+  SpinnerIcon,
+  useAccountForChain,
+  useMessageTimeline,
+  useTimeout,
+  useWalletDetails,
+  WideChevronIcon,
+} from '@hyperlane-xyz/widgets';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Spinner } from '../../components/animation/Spinner';
-import { CopyButton } from '../../components/buttons/CopyButton';
 import { ChainLogo } from '../../components/icons/ChainLogo';
 import { TokenIcon } from '../../components/icons/TokenIcon';
-import { WideChevron } from '../../components/icons/WideChevron';
-import { Modal } from '../../components/layout/Modal';
 import LinkIcon from '../../images/icons/external-link-icon.svg';
+import { Color } from '../../styles/Color';
 import { formatTimestamp } from '../../utils/date';
 import { getHypExplorerLink } from '../../utils/links';
 import { logger } from '../../utils/logger';
-import { useTimeout } from '../../utils/timeout';
 import {
   getIconByTransferStatus,
   getTransferStatusLabel,
@@ -21,8 +28,7 @@ import {
 } from '../../utils/transfer';
 import { useMultiProvider } from '../chains/hooks';
 import { getChainDisplayName, hasPermissionlessChain } from '../chains/utils';
-import { useWarpCore } from '../tokens/hooks';
-import { useAccountForChain, useWalletDetails } from '../wallet/hooks/multiProtocol';
+import { tryFindToken, useWarpCore } from '../tokens/hooks';
 import { TransferContext, TransferStatus } from './types';
 
 export function TransfersDetailsModal({
@@ -51,10 +57,12 @@ export function TransfersDetailsModal({
     timestamp,
   } = transfer || {};
 
-  const account = useAccountForChain(origin);
-  const walletDetails = useWalletDetails()[account?.protocol || ProtocolType.Ethereum];
-
   const multiProvider = useMultiProvider();
+  const warpCore = useWarpCore();
+
+  const isChainKnown = multiProvider.hasChain(origin);
+  const account = useAccountForChain(multiProvider, isChainKnown ? origin : undefined);
+  const walletDetails = useWalletDetails()[account?.protocol || ProtocolType.Ethereum];
 
   const getMessageUrls = useCallback(async () => {
     try {
@@ -82,10 +90,8 @@ export function TransfersDetailsModal({
 
   const isAccountReady = !!account?.isReady;
   const connectorName = walletDetails.name || 'wallet';
-  const token = useWarpCore().findToken(origin, originTokenAddressOrDenom);
-
+  const token = tryFindToken(warpCore, origin, originTokenAddressOrDenom);
   const isPermissionlessRoute = hasPermissionlessChain(multiProvider, [destination, origin]);
-
   const isSent = isTransferSent(status);
   const isFailed = isTransferFailed(status);
   const isFinal = isSent || isFailed;
@@ -105,14 +111,7 @@ export function TransfersDetailsModal({
   const explorerLink = getHypExplorerLink(multiProvider, origin, msgId);
 
   return (
-    <Modal
-      showCloseBtn={false}
-      isOpen={isOpen}
-      close={onClose}
-      title=""
-      padding="p-4 md:p-5"
-      width="max-w-sm"
-    >
+    <Modal isOpen={isOpen} close={onClose} panelClassname="p-4 md:p-5 max-w-sm">
       {isFinal && (
         <div className="flex justify-between">
           <h2 className="font-medium text-gray-600">{date}</h2>
@@ -192,7 +191,7 @@ export function TransfersDetailsModal({
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-4">
-          <Spinner />
+          <SpinnerIcon width={60} height={60} className="mt-3" />
           <div
             className={`mt-5 text-center text-sm ${isFailed ? 'text-red-600' : 'text-gray-600'}`}
           >
@@ -250,11 +249,23 @@ function TransferProperty({ name, value, url }: { name: string; value: string; u
               <Image src={LinkIcon} width={14} height={14} alt="" />
             </a>
           )}
-          <CopyButton copyValue={value} width={14} height={14} />
+          <CopyButton copyValue={value} width={14} height={14} className="opacity-40" />
         </div>
       </div>
       <div className="mt-1 truncate text-sm leading-normal tracking-wider">{value}</div>
     </div>
+  );
+}
+
+function WideChevron() {
+  return (
+    <WideChevronIcon
+      width="16"
+      height="100%"
+      direction="e"
+      color={Color.lightGray}
+      rounded={true}
+    />
   );
 }
 
