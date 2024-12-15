@@ -42,4 +42,25 @@ tokens:
     name: 'USD Coin (Arb1)'
     standard: EvmHypSynthetic
     symbol: USDC
+    # ======== USDT ========
+  - chainName: arbitrum
+    addressOrDenom: '0xAAB7A78Bb51d0aA174045E5b078388824D99122B'
+    collateralAddressOrDenom: '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9'
+    connections:
+      - token: ethereum|linea|0x50bB2E7502ae1915C6a55aA22E04274B813F40BD
+    decimals: 6
+    logoURI: /deployments/warp_routes/USDT/logo.svg
+    name: 'Tether USD '
+    standard: EvmHypCollateral
+    symbol: USDT
+  - chainName: linea
+    addressOrDenom: '0x50bB2E7502ae1915C6a55aA22E04274B813F40BD'
+    collateralAddressOrDenom: '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9'
+    connections:
+      - token: ethereum|arbitrum|0xAAB7A78Bb51d0aA174045E5b078388824D99122B
+    decimals: 6
+    logoURI: /deployments/warp_routes/USDT/logo.svg
+    name: 'Tether USD'
+    standard: EvmHypSynthetic
+    symbol: USDT
 
